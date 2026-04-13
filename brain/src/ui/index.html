@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spider Robot</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <!-- Header -->
+  <header>
+    <div class="logo">🕷 Spider Robot</div>
+    <div class="header-status">
+      <span id="conn-badge" class="badge badge-off">DISCONNECTED</span>
+      <span id="battery-display" class="battery">⚡ --.-V</span>
+      <span id="latency-display" class="latency">-- ms</span>
+    </div>
+  </header>
+
+  <!-- Main grid -->
+  <main>
+    <!-- 3D Viewport -->
+    <section class="panel panel-3d" id="viewport-panel">
+      <div class="panel-title">Live View</div>
+      <canvas id="spider-canvas"></canvas>
+      <div class="viewport-overlay">
+        <span id="behavior-label" class="behavior-chip">idle</span>
+      </div>
+    </section>
+
+    <!-- Behavior controls -->
+    <section class="panel panel-behavior">
+      <div class="panel-title">Behaviors</div>
+      <div class="behavior-grid">
+        <button class="behav-btn" data-state="idle"    title="Gentle breathing sway">😐 Idle</button>
+        <button class="behav-btn" data-state="alert"   title="Raised body, scanning">⚠️ Alert</button>
+        <button class="behav-btn" data-state="happy"   title="Energetic waggle">😄 Happy</button>
+        <button class="behav-btn" data-state="curious" title="Forward lean">🤔 Curious</button>
+        <button class="behav-btn" data-state="sleepy"  title="Slowly droops to sleep">😴 Sleepy</button>
+        <button class="behav-btn" data-state="sleep"   title="Fully lowered, quiet">💤 Sleep</button>
+      </div>
+
+      <div class="panel-title" style="margin-top:1rem">Movement</div>
+      <div class="move-grid">
+        <div></div>
+        <button class="move-btn" id="btn-fwd"   data-cmd='{"action":"walk","dir":"F"}'>▲</button>
+        <div></div>
+        <button class="move-btn" id="btn-left"  data-cmd='{"action":"walk","dir":"L"}'>◄</button>
+        <button class="move-btn stop-btn" id="btn-stop" data-cmd='{"action":"stop"}'>■</button>
+        <button class="move-btn" id="btn-right" data-cmd='{"action":"walk","dir":"R"}'>►</button>
+        <div></div>
+        <button class="move-btn" id="btn-back"  data-cmd='{"action":"walk","dir":"B"}'>▼</button>
+        <div></div>
+      </div>
+      <div class="key-hint">WASD / arrow keys supported</div>
+    </section>
+
+    <!-- Body control sliders -->
+    <section class="panel panel-body">
+      <div class="panel-title">Body Position</div>
+      <div class="slider-group">
+        <label>X (side) <span id="body-x-val">0</span>mm</label>
+        <input type="range" id="body-x" min="-25" max="25" value="0" class="slider">
+
+        <label>Y (front) <span id="body-y-val">0</span>mm</label>
+        <input type="range" id="body-y" min="-25" max="25" value="0" class="slider">
+
+        <label>Z (height) <span id="body-z-val">0</span>mm</label>
+        <input type="range" id="body-z" min="-15" max="20" value="0" class="slider">
+      </div>
+      <button class="btn-secondary" id="body-reset">Reset Position</button>
+
+      <div class="panel-title" style="margin-top:1rem">Body Rotation</div>
+      <div class="slider-group">
+        <label>Roll <span id="rot-x-val">0</span>°</label>
+        <input type="range" id="rot-x" min="-150" max="150" value="0" class="slider">
+
+        <label>Pitch <span id="rot-y-val">0</span>°</label>
+        <input type="range" id="rot-y" min="-150" max="150" value="0" class="slider">
+
+        <label>Yaw <span id="rot-z-val">0</span>°</label>
+        <input type="range" id="rot-z" min="-150" max="150" value="0" class="slider">
+      </div>
+      <button class="btn-secondary" id="rot-reset">Reset Rotation</button>
+    </section>
+
+    <!-- Status panel -->
+    <section class="panel panel-status">
+      <div class="panel-title">Status</div>
+      <div class="status-grid">
+        <div class="status-item">
+          <span class="status-label">State</span>
+          <span class="status-value" id="stat-behavior">--</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Battery</span>
+          <span class="status-value" id="stat-voltage">--</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Busy</span>
+          <span class="status-value" id="stat-busy">--</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Connection</span>
+          <span class="status-value" id="stat-conn">--</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Last seen</span>
+          <span class="status-value" id="stat-lastseen">--</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">RTT</span>
+          <span class="status-value" id="stat-rtt">--</span>
+        </div>
+      </div>
+
+      <!-- Battery bar -->
+      <div class="panel-title" style="margin-top:1rem">Battery</div>
+      <div class="battery-bar-wrap">
+        <div class="battery-bar" id="battery-bar"></div>
+        <span id="battery-pct">--%</span>
+      </div>
+    </section>
+
+    <!-- Camera feed -->
+    <section class="panel panel-camera">
+      <div class="panel-title">Camera Feed
+        <button class="btn-tiny" id="cam-refresh" style="margin-left:8px">↺</button>
+        <button class="btn-tiny" id="cam-led-on"  style="margin-left:4px">LED on</button>
+        <button class="btn-tiny" id="cam-led-off" style="margin-left:4px">LED off</button>
+      </div>
+      <div class="camera-wrap" id="camera-wrap">
+        <img id="camera-img" src="http://192.168.1.210/stream"
+             style="width:100%;height:100%;object-fit:contain;display:block"
+             alt="camera feed">
+        <div class="camera-placeholder" id="camera-error" style="display:none">
+          <span>Camera offline</span>
+          <small>192.168.1.210 unreachable</small>
+        </div>
+      </div>
+    </section>
+
+    <!-- Event log -->
+    <section class="panel panel-log">
+      <div class="panel-title">Event Log <button class="btn-tiny" id="clear-log">clear</button></div>
+      <div class="log-scroll" id="event-log"></div>
+    </section>
+
+    <!-- Brain console -->
+    <section class="panel panel-brain">
+      <div class="panel-title">Brain Console <button class="btn-tiny" id="clear-brain">clear</button></div>
+      <div class="log-scroll" id="brain-log"></div>
+    </section>
+
+    <!-- Calibration panel -->
+    <section class="panel panel-calibrate">
+      <details id="cal-details">
+        <summary class="panel-title" style="cursor:pointer;user-select:none">
+          Servo Calibration
+          <span style="font-size:10px;color:#888;margin-left:6px">(click to expand)</span>
+          <a href="/print/calibration" target="_blank" class="btn-tiny" style="float:right;margin-top:2px;margin-left:4px">🖨 Cal template</a>
+          <a href="/print/stickers" target="_blank" class="btn-tiny" style="float:right;margin-top:2px">🏷 QR stickers</a>
+        </summary>
+
+        <div style="padding:8px 0 4px">
+          <p style="font-size:11px;color:#aaa;margin:0 0 8px">
+            1. Print the template, place robot belly-down on it.&nbsp;
+            2. Click <b>Enter Cal Mode</b> — legs raise above the graph.&nbsp;
+            3. Pick a leg, nudge X / Y / Z until its foot tip sits on its marked cross.&nbsp;
+            4. Repeat for all 4 legs, then click <b>Save Offsets</b>.&nbsp;
+            5. <b>Check Alignment</b> verifies, <b>Exit</b> returns to IDLE.
+          </p>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+            <button class="btn-secondary" onclick="calAction('prep')">Enter Cal Mode</button>
+            <button class="btn-secondary" onclick="calAction('save')" style="background:#2a4">Save Offsets</button>
+            <button class="btn-secondary" onclick="calAction('check')">Check Alignment</button>
+            <button class="btn-secondary" onclick="calAction('exit')">Exit</button>
+            <button class="btn-secondary" onclick="calAction('reset')" style="background:#622">Reset All</button>
+            <button class="btn-secondary" id="auto-toggle" onclick="toggleAutonomy()" style="margin-left:auto;background:#444">Autonomy: ?</button>
+          </div>
+          <div id="cal-msg" style="font-size:11px;color:#8cf;min-height:16px;margin-bottom:6px"></div>
+
+          <!-- Cartesian leg-tip nudge controls (Freenove flow) -->
+          <div class="cal-nudge">
+            <div class="cal-nudge-row">
+              <span class="cal-label">Leg:</span>
+              <div class="cal-leg-picker" id="cal-leg-picker">
+                <button data-leg="1" class="active">1&nbsp;FL</button>
+                <button data-leg="2">2&nbsp;BL</button>
+                <button data-leg="3">3&nbsp;FR</button>
+                <button data-leg="4">4&nbsp;BR</button>
+              </div>
+              <span class="cal-label" style="margin-left:1rem">Step:</span>
+              <div class="cal-step-picker" id="cal-step-picker">
+                <button data-step="1">1&nbsp;mm</button>
+                <button data-step="5" class="active">5&nbsp;mm</button>
+                <button data-step="10">10&nbsp;mm</button>
+              </div>
+            </div>
+
+            <div class="cal-nudge-pad">
+              <div class="cal-axis">
+                <div class="cal-axis-name">X &nbsp;<span class="cal-axis-hint">left ↔ right</span></div>
+                <button onclick="nudge(-1,0,0)">X−</button>
+                <button onclick="nudge( 1,0,0)">X+</button>
+              </div>
+              <div class="cal-axis">
+                <div class="cal-axis-name">Y &nbsp;<span class="cal-axis-hint">back ↔ front</span></div>
+                <button onclick="nudge(0,-1,0)">Y−</button>
+                <button onclick="nudge(0, 1,0)">Y+</button>
+              </div>
+              <div class="cal-axis">
+                <div class="cal-axis-name">Z &nbsp;<span class="cal-axis-hint">down ↔ up</span></div>
+                <button onclick="nudge(0,0,-1)">Z−</button>
+                <button onclick="nudge(0,0, 1)">Z+</button>
+              </div>
+            </div>
+            <div class="cal-hint">
+              Tip: legs start ~35 mm above the page. Push <b>Z−</b> until each foot just kisses its cross.
+              Then nudge X/Y for fine alignment. Save when all four feet are on their marks.
+            </div>
+          </div>
+        </div>
+      </details>
+    </section>
+  </main>
+
+  <script>
+  // Calibration panel logic — self-contained, no dependency on app.js
+  let calLeg  = 1;   // currently selected leg
+  let calStep = 5;   // mm per click
+  let autonomyOn = true;
+
+  async function calAction(cmd) {
+    const msg = document.getElementById('cal-msg');
+    msg.textContent = '...';
+    try {
+      const r = await fetch(`/api/calibrate/${cmd}`, {method:'POST'});
+      const d = await r.json();
+      msg.textContent = d.message || (d.ok ? 'OK' : d.error || 'error');
+      // prep auto-pauses, exit auto-resumes — reflect that in the toggle
+      if (cmd === 'prep') { autonomyOn = false; updateAutoBtn(); }
+      if (cmd === 'exit') { autonomyOn = true;  updateAutoBtn(); }
+    } catch(e) {
+      msg.textContent = 'Request failed: ' + e;
+    }
+  }
+
+  function updateAutoBtn() {
+    const b = document.getElementById('auto-toggle');
+    if (!b) return;
+    b.textContent = 'Autonomy: ' + (autonomyOn ? 'ON' : 'OFF');
+    b.style.background = autonomyOn ? '#2a4' : '#622';
+  }
+
+  async function toggleAutonomy() {
+    autonomyOn = !autonomyOn;
+    updateAutoBtn();
+    try {
+      await fetch(`/api/autonomy/enable?enabled=${autonomyOn}`, {method:'POST'});
+    } catch(e) {}
+  }
+
+  // Sync initial state on page load
+  fetch('/api/autonomy/context').then(r=>r.json()).then(d=>{
+    // No direct enabled flag — infer from lockout: if locked_out_for == 0 always, treat as on
+    updateAutoBtn();
+  }).catch(()=>updateAutoBtn());
+
+  async function nudge(sx, sy, sz) {
+    const dx = sx * calStep, dy = sy * calStep, dz = sz * calStep;
+    const msg = document.getElementById('cal-msg');
+    try {
+      const r = await fetch(`/api/calibrate/nudge?leg=${calLeg}&dx=${dx}&dy=${dy}&dz=${dz}`, {method:'POST'});
+      const d = await r.json();
+      if (!d.ok) {
+        msg.textContent = d.error || 'nudge failed';
+      } else {
+        msg.textContent = `leg ${calLeg}: Δ(${dx}, ${dy}, ${dz}) mm`;
+      }
+    } catch(e) { msg.textContent = 'Nudge failed: ' + e; }
+  }
+
+  document.querySelectorAll('#cal-leg-picker button').forEach(b => {
+    b.addEventListener('click', () => {
+      calLeg = parseInt(b.dataset.leg, 10);
+      document.querySelectorAll('#cal-leg-picker button').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+    });
+  });
+  document.querySelectorAll('#cal-step-picker button').forEach(b => {
+    b.addEventListener('click', () => {
+      calStep = parseInt(b.dataset.step, 10);
+      document.querySelectorAll('#cal-step-picker button').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+    });
+  });
+  </script>
+
+  <!-- Three.js from CDN — no build step, no npm -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.165.0/build/three.module.js"
+    }
+  }
+  </script>
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>

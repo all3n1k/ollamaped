@@ -1,0 +1,60 @@
+# =============================================================================
+#  ollamaped — .gitignore
+# =============================================================================
+
+# ---- Secrets --------------------------------------------------------------
+# Real credentials live in Secrets.h / secrets.h next to each sketch.
+# The matching .example.h files ARE committed as templates.
+**/Secrets.h
+**/secrets.h
+!**/Secrets.example.h
+!**/secrets.example.h
+
+# Room fingerprint file — leaks home WiFi SSIDs
+brain/src/robot/apartment_map.json
+
+# ---- Python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# ---- Arduino / build outputs ---------------------------------------------
+# arduino-cli writes build/ next to each sketch
+**/build/
+*.hex
+*.elf
+*.bin
+!firmware/spider_esp/build_release/*.bin  # (placeholder — uncomment if you ship release binaries)
+
+# Flash dumps and vendor blobs
+firmware/esp_at_old.bin
+firmware/esp_backup.bin
+firmware/partial_flash.bin
+firmware/test_read.bin
+firmware/at_firmware/
+firmware/ESP-WROOM-02-AT-V2.3.0.0.zip
+
+# ---- Editors / IDEs ------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+
+# ---- Logs / scratch ------------------------------------------------------
+*.log
+scratch/
+tmp/

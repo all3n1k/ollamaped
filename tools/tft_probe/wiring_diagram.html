@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>TFT Display Wiring — XW-TS0526 / UN2572</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', sans-serif;
+    padding: 40px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 1.4rem;
+    color: #a0c4ff;
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+  }
+
+  .subtitle {
+    text-align: center;
+    font-size: 0.85rem;
+    color: #666;
+    margin-bottom: 48px;
+  }
+
+  .diagram {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    flex-wrap: nowrap;
+  }
+
+  /* ── Component boxes ── */
+  .component {
+    background: #16213e;
+    border: 2px solid #0f3460;
+    border-radius: 10px;
+    padding: 16px 12px;
+    min-width: 130px;
+    text-align: center;
+  }
+
+  .component .label {
+    font-size: 0.7rem;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+  }
+
+  .component .title {
+    font-size: 0.95rem;
+    font-weight: bold;
+    color: #a0c4ff;
+    margin-bottom: 14px;
+  }
+
+  .pin {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    margin: 3px 0;
+    border-radius: 5px;
+    font-size: 0.78rem;
+    gap: 8px;
+  }
+
+  .pin .pin-name {
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .pin .pin-desc {
+    font-size: 0.68rem;
+    color: #aaa;
+    text-align: right;
+  }
+
+  /* Pin color coding */
+  .pin-5v    { background: #2d1a00; border-left: 3px solid #ff6b00; }
+  .pin-3v    { background: #1a2d00; border-left: 3px solid #7bc67e; }
+  .pin-gnd   { background: #1a1a1a; border-left: 3px solid #555; }
+  .pin-tx    { background: #1a1a35; border-left: 3px solid #5b8dee; }
+  .pin-rx    { background: #1a2535; border-left: 3px solid #7ec8e3; }
+  .pin-det   { background: #2d1a2d; border-left: 3px solid #c77dff; }
+  .pin-vcc   { background: #1a2d00; border-left: 3px solid #7bc67e; }
+  .pin-data  { background: #2d2d1a; border-left: 3px solid #ffd166; }
+
+  /* ── Level shifter — wider ── */
+  .shifter {
+    background: #0d1b2a;
+    border: 2px solid #1b4f72;
+    border-radius: 10px;
+    padding: 16px 8px;
+    min-width: 240px;
+    position: relative;
+  }
+
+  .shifter .label {
+    font-size: 0.7rem;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-align: center;
+    margin-bottom: 4px;
+  }
+
+  .shifter .title {
+    font-size: 0.95rem;
+    font-weight: bold;
+    color: #7ec8e3;
+    text-align: center;
+    margin-bottom: 14px;
+  }
+
+  .shifter-inner {
+    display: flex;
+    gap: 8px;
+  }
+
+  .shifter-side {
+    flex: 1;
+    background: #0a1520;
+    border-radius: 6px;
+    padding: 8px 6px;
+  }
+
+  .shifter-side .side-label {
+    text-align: center;
+    font-size: 0.68rem;
+    font-weight: bold;
+    margin-bottom: 8px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    letter-spacing: 1px;
+  }
+
+  .hv-label { background: #2d1a00; color: #ff6b00; }
+  .lv-label { background: #1a2d00; color: #7bc67e; }
+
+  .shifter-pin {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 6px;
+    margin: 3px 0;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .s-5v   { background: #2d1a00; color: #ff6b00; }
+  .s-gnd  { background: #1a1a1a; color: #888; }
+  .s-ch1  { background: #1a1a35; color: #5b8dee; }
+  .s-ch2  { background: #1a2535; color: #7ec8e3; }
+
+  .channel-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    color: #444;
+    margin: 2px 0;
+  }
+
+  /* ── Connector lines ── */
+  .wires {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0 4px;
+    align-items: center;
+    justify-content: center;
+    min-width: 70px;
+  }
+
+  .wire {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    height: 22px;
+  }
+
+  .wire-line {
+    height: 2px;
+    flex: 1;
+  }
+
+  .wire-label {
+    font-size: 0.65rem;
+    white-space: nowrap;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-weight: 600;
+  }
+
+  .w-5v    { background: #ff6b00; }
+  .w-3v    { background: #7bc67e; color: #000; }
+  .w-gnd   { background: #555; }
+  .w-tx    { background: #5b8dee; }
+  .w-rx    { background: #7ec8e3; color: #000; }
+  .w-det   { background: #c77dff; color: #000; }
+  .w-data  { background: #ffd166; color: #000; }
+
+  /* ── Bridge on LV side ── */
+  .bridge-wires {
+    display: flex;
+    flex-direction: column;
+    padding: 0 4px;
+    min-width: 90px;
+    justify-content: center;
+    position: relative;
+  }
+
+  .bridge-line {
+    height: 2px;
+    margin: 10px 0;
+    position: relative;
+  }
+
+  .bridge-join {
+    position: absolute;
+    right: 0;
+    top: -10px;
+    width: 2px;
+    height: 22px;
+    background: #ffd166;
+  }
+
+  .bridge-out {
+    display: flex;
+    align-items: center;
+    position: absolute;
+    right: 0;
+    top: 0;
+    transform: translateY(-50%);
+    height: 2px;
+  }
+
+  /* ── Notes ── */
+  .notes {
+    margin-top: 48px;
+    max-width: 860px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .notes h2 {
+    font-size: 0.85rem;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid #222;
+    padding-bottom: 8px;
+  }
+
+  .note-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .note {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    color: #ccc;
+  }
+
+  .note strong {
+    color: #a0c4ff;
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  .note .warn {
+    color: #ff6b00;
+    font-weight: bold;
+  }
+
+  .note .ok {
+    color: #7bc67e;
+    font-weight: bold;
+  }
+
+  /* ── Legend ── */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 24px;
+    justify-content: center;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    color: #aaa;
+  }
+
+  .legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* SVG connector canvas */
+  .svg-container {
+    position: relative;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin-bottom: 24px;
+  }
+</style>
+</head>
+<body>
+
+<h1>XW-TS0526 / UN2572 — Wiring Diagram</h1>
+<p class="subtitle">ATmega2560 (P3 Connector) → BSS138 Level Shifter → TFT Display</p>
+
+<div class="diagram">
+
+  <!-- ── ATmega P3 Connector ── -->
+  <div class="component">
+    <div class="label">ATmega2560</div>
+    <div class="title">P3 Connector</div>
+
+    <div class="pin pin-5v">
+      <span class="pin-name">5V</span>
+      <span class="pin-desc">Power</span>
+    </div>
+    <div class="pin pin-3v">
+      <span class="pin-name">3.3V</span>
+      <span class="pin-desc">Power</span>
+    </div>
+    <div class="pin pin-gnd">
+      <span class="pin-name">GND</span>
+      <span class="pin-desc">Ground</span>
+    </div>
+    <div class="pin pin-tx">
+      <span class="pin-name">Pin 2</span>
+      <span class="pin-desc">TX (SoftSerial)</span>
+    </div>
+    <div class="pin pin-rx">
+      <span class="pin-name">Pin 3</span>
+      <span class="pin-desc">RX (SoftSerial)</span>
+    </div>
+  </div>
+
+  <!-- ── Wires ATmega → Shifter ── -->
+  <div class="wires">
+    <div class="wire">
+      <div class="wire-line" style="background:#ff6b00;"></div>
+      <div class="wire-label w-5v">5V</div>
+      <div class="wire-line" style="background:#ff6b00;"></div>
+    </div>
+    <div class="wire">
+      <div class="wire-line" style="background:#7bc67e;"></div>
+      <div class="wire-label w-3v">3.3V</div>
+      <div class="wire-line" style="background:#7bc67e;"></div>
+    </div>
+    <div class="wire">
+      <div class="wire-line" style="background:#555;"></div>
+      <div class="wire-label w-gnd">GND</div>
+      <div class="wire-line" style="background:#555;"></div>
+    </div>
+    <div class="wire">
+      <div class="wire-line" style="background:#5b8dee;"></div>
+      <div class="wire-label w-tx">TX</div>
+      <div class="wire-line" style="background:#5b8dee;"></div>
+    </div>
+    <div class="wire">
+      <div class="wire-line" style="background:#7ec8e3;"></div>
+      <div class="wire-label w-rx">RX</div>
+      <div class="wire-line" style="background:#7ec8e3;"></div>
+    </div>
+  </div>
+
+  <!-- ── Level Shifter ── -->
+  <div class="shifter">
+    <div class="label">BSS138 Module</div>
+    <div class="title">Logic Level Shifter</div>
+    <div class="shifter-inner">
+
+      <div class="shifter-side">
+        <div class="side-label hv-label">HV  5V side</div>
+        <div class="shifter-pin s-5v">HV <span style="font-size:0.65rem;color:#aaa">← 5V</span></div>
+        <div class="shifter-pin s-gnd">GND</div>
+        <div class="shifter-pin s-ch1">HV1 <span style="font-size:0.65rem;color:#5b8dee">← TX</span></div>
+        <div class="shifter-pin s-ch2">HV2 <span style="font-size:0.65rem;color:#7ec8e3">← RX</span></div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 4px;gap:6px;">
+        <div style="font-size:0.6rem;color:#444;writing-mode:vertical-rl;letter-spacing:2px;">ISOLATED</div>
+        <div style="width:1px;flex:1;background:linear-gradient(to bottom,#1b4f72,#7ec8e3,#1b4f72);"></div>
+        <div style="font-size:0.6rem;color:#444;writing-mode:vertical-rl;letter-spacing:2px;">CHANNEL</div>
+      </div>
+
+      <div class="shifter-side">
+        <div class="side-label lv-label">LV  3.3V side</div>
+        <div class="shifter-pin" style="background:#1a2d00;color:#7bc67e;">LV <span style="font-size:0.65rem;color:#aaa">← 3.3V</span></div>
+        <div class="shifter-pin s-gnd">GND</div>
+        <div class="shifter-pin" style="background:#2d2d1a;color:#ffd166;">LV1 <span style="font-size:0.65rem;color:#aaa">→ pad</span></div>
+        <div class="shifter-pin" style="background:#2d2d1a;color:#ffd166;">LV2 <span style="font-size:0.65rem;color:#aaa">→ pad</span></div>
+      </div>
+
+    </div>
+
+    <div style="margin-top:10px;text-align:center;font-size:0.68rem;color:#ffd166;">
+      LV1 + LV2 bridged together → single wire out
+    </div>
+  </div>
+
+  <!-- ── Wires Shifter → Display ── -->
+  <div class="wires" style="min-width:90px;">
+    <div class="wire">
+      <div class="wire-line" style="background:#7bc67e;"></div>
+      <div class="wire-label w-3v">VCC</div>
+      <div class="wire-line" style="background:#7bc67e;"></div>
+    </div>
+    <div class="wire">
+      <div class="wire-line" style="background:#555;"></div>
+      <div class="wire-label w-gnd">GND</div>
+      <div class="wire-line" style="background:#555;"></div>
+    </div>
+    <div class="wire">
+      <div class="wire-line" style="background:#555;"></div>
+      <div class="wire-label w-det">DET→GND</div>
+      <div class="wire-line" style="background:#555;"></div>
+    </div>
+    <div class="wire">
+      <div class="wire-line" style="background:#ffd166;"></div>
+      <div class="wire-label w-data">DATA</div>
+      <div class="wire-line" style="background:#ffd166;"></div>
+    </div>
+  </div>
+
+  <!-- ── Display ── -->
+  <div class="component">
+    <div class="label">XW-TS0526</div>
+    <div class="title">TFT Display</div>
+
+    <div class="pin pin-vcc">
+      <span class="pin-name">VCC</span>
+      <span class="pin-desc">3.3V only</span>
+    </div>
+    <div class="pin pin-data">
+      <span class="pin-name">U_TX.RX</span>
+      <span class="pin-desc">Data (half-duplex)</span>
+    </div>
+    <div class="pin pin-det">
+      <span class="pin-name">TFT_DET</span>
+      <span class="pin-desc">Tie to GND</span>
+    </div>
+    <div class="pin pin-gnd">
+      <span class="pin-name">GND</span>
+      <span class="pin-desc">Ground</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Legend ── -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#ff6b00;"></div> 5V Power</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#7bc67e;"></div> 3.3V Power</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#555;"></div> Ground</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#5b8dee;"></div> TX (Pin 2)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#7ec8e3;"></div> RX (Pin 3)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ffd166;"></div> Data (bridged LV1+LV2)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#c77dff;"></div> TFT_DET → GND</div>
+</div>
+
+<!-- ── Notes ── -->
+<div class="notes">
+  <h2>Wiring Notes</h2>
+  <div class="note-grid">
+
+    <div class="note">
+      <strong>VCC — Use 3.3V, not 5V</strong>
+      The UN2572 controller and its onboard LDO (RDMSY6) are 3.3V devices.
+      Feeding 5V to the VCC pad will likely damage the IC.
+      Use the <span class="ok">3.3V pin on P3</span> for display power.
+    </div>
+
+    <div class="note">
+      <strong>TFT_DET — Tie directly to GND</strong>
+      This pad is active-low. Holding it LOW permanently keeps the module
+      awake. No GPIO pin needed — just run a short wire from
+      <span class="ok">TFT_DET → GND</span> on the display board itself.
+    </div>
+
+    <div class="note">
+      <strong>LV1 + LV2 — Bridge together</strong>
+      The display has one data pad (U_TX.RX) but the ATmega needs separate
+      TX and RX lines. Both LV1 and LV2 connect to the same pad.
+      <span class="ok">Twist or solder the two wires together</span> before
+      connecting to U_TX.RX.
+    </div>
+
+    <div class="note">
+      <strong>TX vs RX — Does swapping matter?</strong>
+      Pin 2 = TX (sends), Pin 3 = RX (receives). Since both land on the
+      same physical pad, swapping the dupont wires on HV1/HV2
+      <span class="ok">makes no difference</span> to the circuit.
+    </div>
+
+    <div class="note">
+      <strong>Level shifter power pins</strong>
+      HV and LV are reference voltage pins, not signal channels.
+      <span class="warn">Both must be connected</span> or the shifter
+      won't work. HV → P3 5V, LV → P3 3.3V.
+    </div>
+
+    <div class="note">
+      <strong>ATmega GPIO is always 5V</strong>
+      Even though P3 has a 3.3V power output pin, every GPIO pin
+      (including pins 2 and 3) outputs <span class="warn">5V logic</span>.
+      The level shifter is required on the data line regardless.
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>
