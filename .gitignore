@@ -53,8 +53,12 @@ firmware/ESP-WROOM-02-AT-V2.3.0.0.zip
 .DS_Store
 Thumbs.db
 
+# Local editor state
 
 # ---- Logs / scratch ------------------------------------------------------
 *.log
 scratch/
 tmp/
+
+# Local development context and working notes
+/.private-notes/
