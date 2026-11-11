@@ -4,12 +4,16 @@ FastAPI + WebSocket — replaces the Processing app entirely.
 Serves the dashboard UI and bridges commands to the robot.
 """
 import asyncio
+import ipaddress
+from html import escape
 import json
 import logging
 import os
 import time
 from contextlib import asynccontextmanager
 from typing import Set
+from starlette.datastructures import Headers
+from access_control import AccessPolicy
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -29,11 +33,13 @@ from robot.autonomy import autonomy_engine, _COMMAND_LOCKOUT
 SERIAL_PORT  = os.getenv("ROBOT_PORT",  "COM3")
 SERIAL_BAUD  = int(os.getenv("ROBOT_BAUD", "115200"))
 WIFI_HOST    = os.getenv("ROBOT_WIFI_HOST", "")   # set to ESP8266 IP to use WiFi (outbound)
-TCP_SERVER   = os.getenv("ROBOT_TCP_SERVER", "1") == "1"  # listen for ESP8266 connecting in
+TCP_SERVER   = os.getenv("ROBOT_TCP_SERVER", "0") == "1"  # listen for ESP8266 connecting in
 TCP_PORT     = int(os.getenv("ROBOT_TCP_PORT", "9000"))
-SERVER_HOST  = os.getenv("SERVER_HOST", "0.0.0.0")
+TCP_BIND     = os.getenv("ROBOT_TCP_BIND", "")
+TCP_PEER     = os.getenv("ROBOT_TCP_PEER", "")
+SERVER_HOST  = os.getenv("DASHBOARD_HOST", os.getenv("SERVER_HOST", "127.0.0.1"))
 SERVER_PORT  = int(os.getenv("SERVER_PORT", "8080"))
-AUTONOMY_AUTOSTART = os.getenv("AUTONOMY_AUTOSTART", "1") == "1"  # set to 0 to hold still on boot
+AUTONOMY_AUTOSTART = os.getenv("AUTONOMY_AUTOSTART", "0") == "1"  # set to 0 to hold still on boot
 UI_BROADCAST_HZ = 20   # state pushed to all browser clients at this rate
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s  %(message)s")
@@ -89,7 +95,7 @@ async def robot_connection_task():
         await robot_comm.run_wifi(WIFI_HOST)
     elif TCP_SERVER:
         log.info("TCP server mode — waiting for ESP8266 on port %d", TCP_PORT)
-        await robot_comm.run_tcp_server(TCP_PORT)
+        await robot_comm.run_tcp_server(TCP_PORT, TCP_BIND, TCP_PEER)
     else:
         log.info("Serial mode on %s @ %d", SERIAL_PORT, SERIAL_BAUD)
         await robot_comm.run_serial(SERIAL_PORT, SERIAL_BAUD)
@@ -136,11 +142,29 @@ async def ws_keepalive_task():
 # ---------------------------------------------------------------------------
 # App lifespan
 # ---------------------------------------------------------------------------
+boot_scan_task: asyncio.Task | None = None
+
+async def _cancel_boot_scan():
+    global boot_scan_task
+    if boot_scan_task is not None:
+        boot_scan_task.cancel()
+        await asyncio.gather(boot_scan_task, return_exceptions=True)
+        boot_scan_task = None
+
+
+async def _halt_motion():
+    autonomy_engine.set_enabled(False)
+    await _cancel_boot_scan()
+    await robot_comm.stop()
+
+
 async def _boot_scan():
     """
     Environment scan run once after firmware boot event.
     Rotates 3× taking camera snapshots, logs what Spider sees, then settles to idle.
     """
+    if not AUTONOMY_AUTOSTART:
+        return
     await asyncio.sleep(2.0)   # let firmware stabilize
     await manager.brain_log("boot", "Boot sequence starting — scanning environment", level="info")
     await robot_comm.set_behavior("alert")
@@ -160,11 +184,8 @@ async def _boot_scan():
         await asyncio.sleep(0.3)
 
     await robot_comm.set_behavior("idle")
-    if AUTONOMY_AUTOSTART:
-        autonomy_engine._last_commanded_at = 0.0
-        await manager.brain_log("boot", "Boot complete — Spider is wandering", level="info")
-    else:
-        await manager.brain_log("boot", "Boot complete — autonomy DISABLED (send POST /api/autonomy/enable to start)", level="info")
+    autonomy_engine._last_commanded_at = 0.0
+    await manager.brain_log("boot", "Boot complete — Spider is wandering", level="info")
 
 
 def _setup_hooks():
@@ -172,6 +193,7 @@ def _setup_hooks():
 
     # Firmware event → emotion stimulus
     def _on_robot_event(evt: str):
+        global boot_scan_task
         if evt == "low_bat":
             emotion_engine.stimulate("low_battery")
             robot_state.add_event("Low battery — Spider is unhappy")
@@ -179,7 +201,8 @@ def _setup_hooks():
         elif evt == "boot":
             emotion_engine.stimulate("battery_ok", scale=0.5)
             asyncio.create_task(robot_comm.buzz("boot"))
-            asyncio.create_task(_boot_scan())
+            if AUTONOMY_AUTOSTART and autonomy_engine.enabled and (boot_scan_task is None or boot_scan_task.done()):
+                boot_scan_task = asyncio.create_task(_boot_scan())
 
     set_event_callback(_on_robot_event)
 
@@ -236,6 +259,14 @@ async def rssi_poll_task():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    access_policy.validate_configuration()
+    if TCP_SERVER and not WIFI_HOST:
+        try:
+            bind, peer = ipaddress.ip_address(TCP_BIND), ipaddress.ip_address(TCP_PEER)
+            if bind.is_unspecified or peer.is_unspecified or bind.version != peer.version:
+                raise ValueError("Use specific addresses of the same IP version")
+        except ValueError as exc:
+            raise RuntimeError("TCP mode requires specific ROBOT_TCP_BIND and ROBOT_TCP_PEER IP addresses") from exc
     # Load apartment map for localization
     from robot.pose import pose_tracker
     _map_path = os.path.join(os.path.dirname(__file__), "robot", "apartment_map.json")
@@ -258,12 +289,40 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(rssi_poll_task()),
         asyncio.create_task(vision_loop()),
     ]
-    yield
-    for t in tasks:
-        t.cancel()
+    try:
+        yield
+    finally:
+        await _cancel_boot_scan()
+        for t in tasks:
+            t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
+
+access_policy = AccessPolicy(os.environ, default_host=SERVER_HOST)
+
+class DashboardAccessMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] in ('http', 'websocket'):
+            denied = access_policy.check(Headers(scope=scope))
+            if denied:
+                status, message = denied
+                if scope['type'] == 'websocket':
+                    await send({'type': 'websocket.close', 'code': 1008})
+                else:
+                    body = json.dumps({'error': message}).encode()
+                    headers = [(b'content-type', b'application/json'), (b'cache-control', b'no-store')]
+                    if status == 401:
+                        headers.append((b'www-authenticate', b'Basic realm="Dashboard"'))
+                    await send({'type': 'http.response.start', 'status': status, 'headers': headers})
+                    await send({'type': 'http.response.body', 'body': body})
+                return
+        await self.app(scope, receive, send)
 
 app = FastAPI(title="Spider Robot Brain", lifespan=lifespan)
+app.add_middleware(DashboardAccessMiddleware)
 
 # Serve static UI files
 _ui_path = os.path.join(os.path.dirname(__file__), "ui", "static")
@@ -316,7 +375,10 @@ async def get_autonomy_context():
 
 @app.post("/api/autonomy/enable")
 async def set_autonomy_enabled(enabled: bool = True):
-    autonomy_engine.set_enabled(enabled)
+    if enabled:
+        autonomy_engine.set_enabled(True)
+    else:
+        await _halt_motion()
     return {"ok": True, "enabled": enabled}
 
 
@@ -369,7 +431,7 @@ async def cmd_walk(direction: str):
 
 @app.post("/api/cmd/stop")
 async def cmd_stop():
-    await robot_comm.stop()
+    await _halt_motion()
     return {"ok": True}
 
 
@@ -392,7 +454,7 @@ async def cmd_body(x: int = 0, y: int = 0, z: int = 0):
 async def cmd_trot(direction: str):
     if direction.upper() not in ("F", "B"):
         return {"ok": False, "error": "direction must be F or B"}
-    await robot_comm.trot(direction)
+    await robot_comm.trot(direction.upper())
     return {"ok": True}
 
 
@@ -555,16 +617,17 @@ async def print_stickers():
     try:
         import qrcode
         for room_name, cfg in rooms.items():
-            desc = cfg.get("description", room_name)
+            desc = escape(str(cfg.get("description", room_name)))
+            safe_room = escape(room_name)
             img = qrcode.make(room_name)
             buf = io.BytesIO()
             img.save(buf, format="PNG")
             b64 = base64.b64encode(buf.getvalue()).decode()
             qr_html += f"""
 <div class="sticker">
-  <img src="data:image/png;base64,{b64}" alt="QR {room_name}">
+  <img src="data:image/png;base64,{b64}" alt="QR {safe_room}">
   <div class="label">{desc}</div>
-  <div class="code">{room_name}</div>
+  <div class="code">{safe_room}</div>
 </div>"""
     except ImportError:
         qr_html = "<p style='color:red'>Run <code>pip install qrcode[pil]</code> to enable QR stickers.</p>"
@@ -653,28 +716,34 @@ async def websocket_endpoint(ws: WebSocket):
             raw = await ws.receive_text()
             await _handle_ws_message(raw)
     except WebSocketDisconnect:
+        pass
+    finally:
         manager.disconnect(ws)
 
 
 async def _handle_ws_message(raw: str):
     """Handle commands arriving from the browser over WebSocket."""
+    if len(raw) > 65536:
+        return
     try:
         msg = json.loads(raw)
     except json.JSONDecodeError:
         return
 
+    if not isinstance(msg, dict):
+        return
     action = msg.get("action")
 
     if action == "walk":
-        d = msg.get("dir", "F").upper()
-        if d in ("F", "B"):
-            await robot_comm.trot(d)   # trot for forward/back
-        else:
-            await robot_comm.walk(d)   # crawl turn for L/R
+        direction = msg.get("dir")
+        if isinstance(direction, str):
+            await cmd_walk(direction)
     elif action == "stop":
-        await robot_comm.stop()
+        await _halt_motion()
     elif action == "behavior":
-        await robot_comm.set_behavior(msg.get("state", "idle"))
+        behavior = msg.get("state")
+        if isinstance(behavior, str):
+            await cmd_behavior(behavior)
     elif action == "body":
         await robot_comm.move_body(
             int(msg.get("x", 0)),
@@ -688,14 +757,18 @@ async def _handle_ws_message(raw: str):
             int(msg.get("z", 0)),
         )
     elif action == "trot":
-        await robot_comm.trot(msg.get("dir", "F"))
+        direction = msg.get("dir")
+        if isinstance(direction, str):
+            await cmd_trot(direction)
     elif action == "twist":
         await robot_comm.twist_body(
             int(msg.get("mx", 0)), int(msg.get("my", 0)), int(msg.get("mz", 0)),
             int(msg.get("rx", 0)), int(msg.get("ry", 0)), int(msg.get("rz", 0)),
         )
     elif action == "speed":
-        await robot_comm.set_speed(int(msg.get("level", 5)))
+        level = msg.get("level")
+        if type(level) is int:
+            await cmd_speed(level)
     elif action == "diag":
         await robot_comm.request_diag()
     elif action == "sleep":
@@ -712,4 +785,4 @@ async def _handle_ws_message(raw: str):
 # Entry point
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    uvicorn.run("main:app", host=SERVER_HOST, port=SERVER_PORT, reload=False)
+    uvicorn.run("main:app", host=SERVER_HOST, port=SERVER_PORT, reload=False, ws_max_size=65536)

@@ -4,6 +4,7 @@ Reads JSON state reports from the robot, sends commands.
 Supports USB serial and TCP (ESP8266 WiFi).
 """
 import asyncio
+import ipaddress
 import json
 import logging
 import time
@@ -55,6 +56,9 @@ class RobotComm:
         await self.send(f"WALK {direction.upper()}")
 
     async def stop(self):
+        # A saturated queue must never drop a stop or replay stale movement.
+        while not self._send_queue.empty():
+            self._send_queue.get_nowait()
         await self.send("STOP")
 
     async def set_behavior(self, state: str):
@@ -202,13 +206,23 @@ class RobotComm:
                 if self._running:
                     await asyncio.sleep(RECONNECT_WAIT)
 
-    async def run_tcp_server(self, port: int = 9000):
+    async def run_tcp_server(self, port: int, bind: str, peer_ip: str):
         """
         TCP server mode — brain listens, ESP8266 connects inward.
         Accepts one robot connection at a time; waits for next on disconnect.
         """
+        expected = ipaddress.ip_address(peer_ip)
+
+        async def accept_robot(reader, writer):
+            peer = writer.get_extra_info("peername")
+            if not peer or ipaddress.ip_address(peer[0]) != expected or self._tcp_writer is not None:
+                writer.close()
+                await writer.wait_closed()
+                return
+            await self._handle_tcp_client(reader, writer)
+
         self._running = True
-        server = await asyncio.start_server(self._handle_tcp_client, "0.0.0.0", port)
+        server = await asyncio.start_server(accept_robot, bind, port)
         addr = server.sockets[0].getsockname()
         log.info("TCP server listening on %s:%d", addr[0], addr[1])
         robot_state.add_event(f"TCP server listening on port {port}")

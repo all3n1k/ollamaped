@@ -464,7 +464,7 @@ Open `http://localhost:8080` for the dashboard.
 
 **Environment variables** you can set before running:
 - `ROBOT_PORT=COM3` — serial port (default COM3)
-- `ROBOT_TCP_SERVER=1` — wait for ESP8266 to connect in (default: 1)
+- `ROBOT_TCP_SERVER=1` — opt into an incoming ESP8266 connection (requires `ROBOT_TCP_BIND` and `ROBOT_TCP_PEER`)
 - `SERVER_PORT=8080` — web server port
 
 ### Test the API manually
@@ -498,7 +498,7 @@ When the ESP-01S programmer and ESP32-CAM arrive, follow `memory/project_hardwar
    #define BRAIN_PORT    9000
    ```
 3. Recompile and flash the ATmega firmware
-4. Set `ROBOT_TCP_SERVER=1` in start.bat (already the default)
+4. Set `ROBOT_TCP_SERVER=1`, `ROBOT_TCP_BIND` (the brain interface IP), and `ROBOT_TCP_PEER` (the ESP8266 IP) before launching
 5. Robot will connect WiFi → TCP to brain on boot; USB serial still works as fallback
 
 ---

@@ -120,7 +120,7 @@ class AutonomyEngine:
     def __init__(self, emotion: EmotionEngine = emotion_engine):
         self._emotion           = emotion
         self._last_commanded_at = 0.0
-        self._enabled           = True    # disabled at boot only if AUTONOMY_AUTOSTART=0
+        self._enabled           = False
         self._log_hook          = None   # callable(action, reason, source)
         self._ollama_ok         = False  # updated after each LLM attempt
 
@@ -132,6 +132,10 @@ class AutonomyEngine:
     def on_command_received(self):
         """Signal that a human or LLM just sent a command."""
         self._last_commanded_at = time.time()
+
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
 
     def set_enabled(self, enabled: bool):
         self._enabled = enabled
@@ -260,7 +264,7 @@ class AutonomyEngine:
     async def _act(self):
         """Try LLM-driven action; fall back to rule-based on any failure."""
         result = await self._act_with_llm()
-        if not result:
+        if not result and self._enabled:
             await self._act_rule_based()
 
     # ------------------------------------------------------------------
@@ -302,6 +306,8 @@ class AutonomyEngine:
                     f"{OLLAMA_BASE_URL}/api/chat",
                     json=payload,
                 )
+            if not self._enabled:
+                return False
             resp.raise_for_status()
 
             raw = resp.json()["message"]["content"].strip()

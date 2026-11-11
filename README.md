@@ -58,11 +58,11 @@ variables before running `python src/main.py`:
 | Variable | Value |
 | --- | --- |
 | `ROBOT_PORT` | Your serial port, for example `COM3` |
-| `ROBOT_TCP_SERVER` | `0` for USB; `1` for incoming ESP8266 TCP |
+| `ROBOT_TCP_SERVER` | Defaults to `0` (USB); `1` opts into incoming ESP8266 TCP |
+| `ROBOT_TCP_BIND`, `ROBOT_TCP_PEER` | Explicit brain interface IP and ESP8266 IP for incoming TCP |
 | `AUTONOMY_AUTOSTART` | `0` to leave autonomous decisions paused |
 
-Open http://localhost:8080 for the dashboard. The server defaults to an incoming
-TCP connection on port 9000, so USB users must explicitly disable that mode.
+Open http://localhost:8080 for the dashboard. An incoming TCP connection on port 9000 requires explicit opt-in and both IPs. Use a trusted, isolated device network; the firmware transport is not encrypted.
 
 For local model-driven operation, start Ollama, install a model, and set
 `OLLAMA_MODEL` to its exact installed name. `OLLAMA_URL` defaults to
@@ -103,3 +103,14 @@ check the applicable upstream terms before redistribution.
 
 Issues and pull requests are welcome. Include the board revision, connection
 mode, reproduction steps, and logs for hardware reports.
+
+## Dashboard access
+
+The dashboard binds to loopback by default. For access through a private remote
+interface, explicitly set `DASHBOARD_HOST`, `DASHBOARD_ALLOWED_HOSTS` (comma-separated
+request hostnames), and a random `DASHBOARD_TOKEN` of at least 24 characters.
+The browser asks for HTTP Basic credentials; use any username and the token as
+the password. API clients may instead send `Authorization: Bearer <token>`.
+Use a trusted TLS tunnel for remote access. Cross-origin browser requests and
+unrecognized Host headers are rejected, including WebSocket handshakes.
+Keep credentials in local environment/configuration, outside source control.
